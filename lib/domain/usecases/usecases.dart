@@ -10,6 +10,10 @@ import '../services/report_calculator.dart';
 
 Failure _invalid(String m) => Failure(m, FailureType.validation);
 
+String? _time(int? minutes) => minutes == null
+    ? null
+    : '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}:00';
+
 // ------------------------------------------------------------- auth
 class AuthUseCases {
   final AuthRepository _repo;
@@ -22,12 +26,12 @@ class AuthUseCases {
   /// Returns true when a session exists right away (no email confirmation needed).
   Future<bool> signUp(String name, String email, String password) {
     if (name.trim().isEmpty) throw _invalid('Name is required');
-    return _repo.signUp(name: name.trim(), email: email.trim(), password: password);
+    return _repo.signUp(name: name.trim(), email: email.trim().toLowerCase(), password: password);
   }
 
-  Future<void> signIn(String email, String password) => _repo.signIn(email.trim(), password);
+  Future<void> signIn(String email, String password) => _repo.signIn(email.trim().toLowerCase(), password);
   Future<void> signOut() => _repo.signOut();
-  Future<void> sendReset(String email) => _repo.sendPasswordReset(email.trim());
+  Future<void> sendReset(String email) => _repo.sendPasswordReset(email.trim().toLowerCase());
   Future<void> updatePassword(String p) => _repo.updatePassword(p);
   Future<UserProfile> profile() => _repo.profile();
   Future<void> updateProfile(Map<String, dynamic> v) => _repo.updateProfile(v);
@@ -96,6 +100,7 @@ class BudgetUseCases {
     required Decimal amount,
     required String? categoryId,
     required DateTime date,
+    int? dueTimeMinutes,
     String? notes,
   }) {
     if (name.trim().isEmpty) throw _invalid('Name is required');
@@ -108,30 +113,40 @@ class BudgetUseCases {
       'amount': MoneyUtils.toDb(amount),
       'category_id': categoryId,
       'due_date': Fmt.db(date),
+      'due_time': _time(dueTimeMinutes),
       'is_recurring': false,
       'notes': notes == null || notes.trim().isEmpty ? null : notes.trim(),
     });
   }
 
-  Future<void> updateItem(BudgetItem item, {required String name, required Decimal amount, required String? categoryId, required DateTime? date, String? notes}) {
+  Future<void> updateItem(BudgetItem item, {required String name, required Decimal amount, required String? categoryId, required DateTime? date, int? dueTimeMinutes, String? notes}) {
     if (name.trim().isEmpty) throw _invalid('Name is required');
     if (amount <= Decimal.zero) throw _invalid('Amount must be greater than 0');
-    if (item.isCompleted && amount != item.amount) {
-      throw const Failure('Undo the completion before changing the amount.', FailureType.validation);
-    }
+    // Completed items can be edited too: the database keeps the linked expense in sync.
     return _repo.updateItem(item.id, {
       'name': name.trim(),
       'amount': MoneyUtils.toDb(amount),
       'category_id': categoryId,
       'due_date': date == null ? null : Fmt.db(date),
+      'due_time': _time(dueTimeMinutes),
       'notes': notes == null || notes.trim().isEmpty ? null : notes.trim(),
     });
   }
 
-  Future<void> deleteItem(BudgetItem item) {
-    if (item.isCompleted) throw _invalid('Undo the completion before deleting this expense.');
-    return _repo.deleteItem(item.id);
+  /// Deleting a completed expense also removes its ledger entry (restoring the budget).
+  Future<void> deleteItem(BudgetItem item) => _repo.deleteItem(item.id);
+
+  Future<BudgetItem?> itemById(String id) => _repo.itemById(id);
+  Future<List<MoneyTxn>> incomes(String budgetId) => _repo.incomes(budgetId);
+
+  Future<void> updateIncome(MoneyTxn t, Decimal amount, DateTime date, String description) {
+    if (amount <= Decimal.zero) throw _invalid('Amount must be greater than 0');
+    return _repo.updateIncome(t.id, amount: amount, date: date, description: description.trim().isEmpty ? 'Other income' : description.trim());
   }
+
+  Future<void> deleteIncome(MoneyTxn t) => _repo.deleteIncome(t.id);
+  Future<void> reopenBudget(MonthlyBudget b) => _repo.reopenBudget(b.id);
+  Future<void> deleteBudget(MonthlyBudget b) => _repo.deleteBudget(b.id);
 
   Future<void> completeItem(BudgetItem item) {
     if (item.isCompleted) return Future.value(); // never deduct twice
@@ -171,6 +186,15 @@ class SavingsUseCases {
     if (amount <= Decimal.zero) throw _invalid('Amount must be greater than 0');
     return _repo.operate(type: 'deposit', amount: amount, date: date, description: description, notes: notes, key: key);
   }
+
+  Future<SavingsTxn?> txById(String id) => _repo.transactionById(id);
+
+  Future<void> updateTx(SavingsTxn t, Decimal amount, DateTime date, String description, String? notes) {
+    if (amount <= Decimal.zero) throw _invalid('Amount must be greater than 0');
+    return _repo.updateTransaction(id: t.id, amount: amount, date: date, description: description, notes: notes);
+  }
+
+  Future<void> deleteTx(SavingsTxn t) => _repo.deleteTransaction(t.id);
 
   Future<void> withdraw(SavingsWallet w, Decimal amount, DateTime date, String description, String? notes, String key) {
     SavingsCalculator.withdraw(w.balance, amount); // validates amount & balance
@@ -215,19 +239,29 @@ class LendingUseCases {
     });
   }
 
-  Future<void> updateLoan(Loan l, {required String name, String? phone, required Decimal rate, required Decimal principal, int? expectedDay, String? notes}) {
+  Future<void> updateLoan(Loan l, {required String name, String? phone, required Decimal rate, required Decimal principal, required DateTime start, int? expectedDay, String? notes}) {
     if (name.trim().isEmpty) throw _invalid('Borrower name is required');
     if (principal <= Decimal.zero) throw _invalid('Principal must be greater than 0');
     if (rate < Decimal.zero) throw _invalid('Interest rate cannot be negative');
-    if (!l.active) throw const Failure('This loan is closed.', FailureType.validation);
+    if (start.isAfter(Fmt.today())) throw _invalid('Start date cannot be in the future');
     return _repo.updateLoan(l.id, {
-      'person_name': name.trim(),
-      'phone': phone == null || phone.trim().isEmpty ? null : phone.trim(),
-      'rate': rate.toString(),
-      'principal': MoneyUtils.toDb(principal),
-      'expected_day': expectedDay,
-      'notes': notes == null || notes.trim().isEmpty ? null : notes.trim(),
+      'p_name': name.trim(),
+      'p_phone': phone == null || phone.trim().isEmpty ? null : phone.trim(),
+      'p_principal': MoneyUtils.toDb(principal),
+      'p_rate': rate.toString(),
+      'p_start': Fmt.db(start),
+      'p_expected_day': expectedDay,
+      'p_notes': notes == null || notes.trim().isEmpty ? null : notes.trim(),
     });
+  }
+
+  Future<void> deleteLoan(Loan l) => _repo.deleteLoan(l.id);
+  Future<void> reopenLoan(Loan l) => _repo.reopenLoan(l.id);
+  Future<void> deletePayment(InterestPayment p) => _repo.deletePayment(p.id);
+
+  Future<void> updatePayment(InterestPayment p, Decimal amount, DateTime date, String? notes) {
+    if (amount <= Decimal.zero) throw _invalid('Amount must be greater than 0');
+    return _repo.updatePayment(id: p.id, amount: amount, date: date, notes: notes);
   }
 
   Future<void> recordPayment({

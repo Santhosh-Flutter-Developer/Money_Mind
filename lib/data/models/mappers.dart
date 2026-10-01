@@ -30,6 +30,8 @@ class Mappers {
           salaryReminder: (j['salary_reminder'] ?? true) as bool,
           closingReminder: (j['closing_reminder'] ?? true) as bool,
           themeMode: (j['theme_mode'] ?? 'system') as String,
+          reminderHour: (j['reminder_hour'] ?? 9) as int,
+          reminderMinute: (j['reminder_minute'] ?? 0) as int,
         );
 
   static ExpenseCategory category(Json j) => ExpenseCategory(
@@ -77,7 +79,15 @@ class Mappers {
         status: ItemStatus.values.firstWhere((s) => s.name == j['status'], orElse: () => ItemStatus.pending),
         completedAt: j['completed_at'] == null ? null : DateTime.parse(j['completed_at'] as String).toLocal(),
         notes: j['notes'] as String?,
+        dueTimeMinutes: _minutes(j['due_time']),
       );
+
+  static int? _minutes(Object? t) {
+    if (t == null) return null;
+    final parts = t.toString().split(':');
+    if (parts.length < 2) return null;
+    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+  }
 
   static MoneyTxn txn(Json j) => MoneyTxn(
         id: j['id'] as String,

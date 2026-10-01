@@ -172,6 +172,7 @@ class LoanDetailController extends GetxController {
     String? phone,
     required Decimal principal,
     required Decimal rate,
+    required DateTime start,
     int? expectedDay,
     String? notes,
   }) async {
@@ -179,9 +180,9 @@ class LoanDetailController extends GetxController {
     if (l == null || saving.value) return false;
     saving.value = true;
     try {
-      await _uc.updateLoan(l, name: name, phone: phone, rate: rate, principal: principal, expectedDay: expectedDay, notes: notes);
+      await _uc.updateLoan(l, name: name, phone: phone, rate: rate, principal: principal, start: start, expectedDay: expectedDay, notes: notes);
       await load();
-      Snack.success('Loan updated. New terms apply to future months.');
+      Snack.success('Loan updated. Months without payments follow the new terms.');
       return true;
     } catch (e) {
       Snack.error(mapError(e).message);
@@ -189,5 +190,40 @@ class LoanDetailController extends GetxController {
     } finally {
       saving.value = false;
     }
+  }
+
+  Future<bool> _run(Future<void> Function() action, String ok, {bool reload = true}) async {
+    if (saving.value) return false;
+    saving.value = true;
+    try {
+      await action();
+      if (reload) await load();
+      Snack.success(ok);
+      return true;
+    } catch (e) {
+      Snack.error(mapError(e).message);
+      await load();
+      return false;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  Future<bool> editPayment(InterestPayment p, Decimal amount, DateTime date, String? notes) =>
+      _run(() => _uc.updatePayment(p, amount, date, notes), 'Payment updated');
+
+  Future<bool> deletePayment(InterestPayment p) => _run(() => _uc.deletePayment(p), 'Payment deleted');
+
+  /// Removes the loan with all its interest history and ledger entries.
+  Future<bool> deleteLoan() {
+    final l = loan.value;
+    if (l == null) return Future.value(false);
+    return _run(() => _uc.deleteLoan(l), 'Loan deleted', reload: false);
+  }
+
+  Future<bool> reopenLoan() {
+    final l = loan.value;
+    if (l == null) return Future.value(false);
+    return _run(() => _uc.reopenLoan(l), 'Loan reopened');
   }
 }

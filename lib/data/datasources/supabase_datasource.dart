@@ -30,7 +30,18 @@ class SupabaseDataSource {
   }
 
   Future<void> signIn(String email, String password) async {
-    await _c.auth.signInWithPassword(email: email, password: password);
+    try {
+      await _c.auth.signInWithPassword(email: email, password: password);
+    } on AuthException catch (e) {
+      final m = e.message.toLowerCase();
+      final offline = e.runtimeType.toString().contains('Retryable') ||
+          m.contains('failed host') || m.contains('socket') || m.contains('clientexception') || m.contains('timeout');
+      if (offline) throw const Failure('No internet connection. Check your network and try again.', FailureType.network);
+      if (m.contains('confirm')) throw const Failure('Please confirm your email address (check your inbox), then log in.', FailureType.auth);
+      if (m.contains('rate') || m.contains('too many')) throw const Failure('Too many attempts. Please wait a minute and try again.', FailureType.auth);
+      // Shows the server's own reason so problems are easy to diagnose.
+      throw Failure('Could not log in: ${e.message}', FailureType.auth);
+    }
   }
 
   Future<void> signOut() => _c.auth.signOut();
@@ -40,7 +51,20 @@ class SupabaseDataSource {
   }
 
   // ------------------------------------------------------- profile
-  Future<Json> profile() async => Map<String, dynamic>.from(await _c.from('profiles').select().eq('id', uid).single());
+  /// Loads the profile; creates it if the sign-up trigger did not (e.g. account made before schema.sql was run).
+  Future<Json> profile() async {
+    var row = await _c.from('profiles').select().eq('id', uid).maybeSingle();
+    if (row == null) {
+      final user = _c.auth.currentUser!;
+      await _c.from('profiles').upsert({
+        'id': user.id,
+        'email': user.email ?? '',
+        'name': (user.userMetadata?['name'] ?? '') as String,
+      });
+      row = await _c.from('profiles').select().eq('id', uid).single();
+    }
+    return Map<String, dynamic>.from(row);
+  }
   Future<void> updateProfile(Json v) async {
     await _c.from('profiles').update(v).eq('id', uid);
   }
@@ -121,6 +145,28 @@ class SupabaseDataSource {
   Future<void> undoItem(String id) => _rpc('undo_budget_item', {'p_item_id': id});
   Future<void> updateSalary(String id, String salary) => _rpc('update_budget_salary', {'p_budget_id': id, 'p_salary': salary});
   Future<void> closeBudget(String id) => _rpc('close_budget', {'p_budget_id': id});
+  Future<void> reopenBudget(String id) => _rpc('reopen_budget', {'p_budget_id': id});
+  Future<void> deleteBudget(String id) async {
+    await _c.rpc('delete_budget', params: {'p_budget_id': id});
+  }
+
+  Future<Json?> itemById(String id) async =>
+      await _c.from('budget_items').select('*, categories(name)').eq('id', id).maybeSingle();
+
+  Future<List<Json>> incomes(String budgetId) async => _list(await _c
+      .from('transactions')
+      .select()
+      .eq('budget_id', budgetId)
+      .eq('ref_type', 'other_income')
+      .order('txn_date'));
+
+  Future<void> updateIncome(String id, Json v) async {
+    await _c.from('transactions').update(v).eq('id', id).eq('ref_type', 'other_income');
+  }
+
+  Future<void> deleteIncome(String id) async {
+    await _c.from('transactions').delete().eq('id', id).eq('ref_type', 'other_income');
+  }
 
   Future<void> addIncome(String budgetId, String amount, String date, String description) async {
     await _c.from('transactions').insert({
@@ -136,7 +182,14 @@ class SupabaseDataSource {
   }
 
   // ------------------------------------------------------- savings
-  Future<Json> wallet() async => Map<String, dynamic>.from(await _c.from('savings_wallet').select().eq('user_id', uid).single());
+  Future<Json> wallet() async {
+    var row = await _c.from('savings_wallet').select().eq('user_id', uid).maybeSingle();
+    if (row == null) {
+      await _c.from('savings_wallet').insert({'user_id': uid});
+      row = await _c.from('savings_wallet').select().eq('user_id', uid).single();
+    }
+    return Map<String, dynamic>.from(row);
+  }
 
   Future<List<Json>> savingsTransactions(String? from, String? to) async {
     var q = _c.from('savings_transactions').select().eq('user_id', uid);
@@ -146,6 +199,9 @@ class SupabaseDataSource {
   }
 
   Future<void> savingsOperation(Json p) => _rpc('savings_operation', p);
+  Future<Json?> savingsTxnById(String id) async => await _c.from('savings_transactions').select().eq('id', id).maybeSingle();
+  Future<void> updateSavingsTxn(Json p) => _rpc('update_savings_transaction', p);
+  Future<void> deleteSavingsTxn(String id) => _rpc('delete_savings_transaction', {'p_id': id});
 
   // ------------------------------------------------------- lending
   Future<void> refreshPeriods() async {
@@ -155,9 +211,14 @@ class SupabaseDataSource {
   Future<List<Json>> loans() async => _list(await _c.from('loans').select().eq('user_id', uid).order('start_date'));
   Future<Json> loan(String id) async => Map<String, dynamic>.from(await _c.from('loans').select().eq('id', id).single());
   Future<void> createLoan(Json p) => _rpc('create_loan', p);
-  Future<void> updateLoan(String id, Json v) async {
-    await _c.from('loans').update(v).eq('id', id);
+  Future<void> updateLoan(Json p) => _rpc('update_loan', p);
+  Future<void> deleteLoan(String id) async {
+    await _c.rpc('delete_loan', params: {'p_loan_id': id});
   }
+
+  Future<void> reopenLoan(String id) => _rpc('reopen_loan', {'p_loan_id': id});
+  Future<void> updatePayment(Json p) => _rpc('update_interest_payment', p);
+  Future<void> deletePayment(String id) => _rpc('delete_interest_payment', {'p_payment_id': id});
 
   Future<List<Json>> periods(String? loanId) async {
     var q = _c.from('loan_interest_periods').select().eq('user_id', uid);

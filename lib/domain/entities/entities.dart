@@ -39,12 +39,16 @@ class AppSettings {
   final bool salaryReminder;
   final bool closingReminder;
   final String themeMode;
+  final int reminderHour;
+  final int reminderMinute;
   const AppSettings({
     this.expenseReminders = true,
     this.interestReminders = true,
     this.salaryReminder = true,
     this.closingReminder = true,
     this.themeMode = 'system',
+    this.reminderHour = 9,
+    this.reminderMinute = 0,
   });
 }
 
@@ -145,6 +149,7 @@ class BudgetItem {
   final ItemStatus status;
   final DateTime? completedAt;
   final String? notes;
+  final int? dueTimeMinutes; // minutes after midnight, optional
 
   const BudgetItem({
     required this.id,
@@ -159,6 +164,7 @@ class BudgetItem {
     required this.status,
     this.completedAt,
     this.notes,
+    this.dueTimeMinutes,
   });
 
   bool get isCompleted => status == ItemStatus.completed;
@@ -177,6 +183,7 @@ class BudgetItem {
         status: status ?? this.status,
         completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
         notes: notes,
+        dueTimeMinutes: dueTimeMinutes,
       );
 }
 

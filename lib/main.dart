@@ -47,7 +47,7 @@ class _ConfigErrorApp extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.all(28),
               child: SelectableText(
-                'MoneyMind is not configured.\n\nRun with:\nflutter run --dart-define=SUPABASE_URL=https://llqtmawuxxkeutaogxuk.supabase.co --dart-define=SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxscXRtYXd1eHhrZXV0YW9neHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NzM3NDIsImV4cCI6MjEwNjM0OTc0Mn0.EyVMVHN8JdkJ94nqIBUSbFLEhKA8KsUecf_h6lGl7j0\n\nThen run supabase/schema.sql in the Supabase SQL editor.',
+                'MoneyMind is not configured.\n\nRun with:\nflutter run --dart-define=SUPABASE_URL=https://xxxx.supabase.co --dart-define=SUPABASE_ANON_KEY=your-anon-key\n\nThen run supabase/schema.sql in the Supabase SQL editor.',
                 textAlign: TextAlign.center,
               ),
             ),

@@ -121,7 +121,7 @@ class _LoanFormPageState extends State<LoanFormPage> {
   final _phone = TextEditingController();
   final _principal = TextEditingController();
   final _rate = TextEditingController();
-  final _day = TextEditingController();
+  int? _expectedDay;
   final _notes = TextEditingController();
   DateTime _start = Fmt.today();
   Loan? _edit;
@@ -137,7 +137,7 @@ class _LoanFormPageState extends State<LoanFormPage> {
       _phone.text = a.phone ?? '';
       _principal.text = a.principal.toString();
       _rate.text = a.rate.toString();
-      _day.text = a.expectedDay?.toString() ?? '';
+      _expectedDay = a.expectedDay;
       _notes.text = a.notes ?? '';
       _start = a.startDate;
     }
@@ -145,7 +145,7 @@ class _LoanFormPageState extends State<LoanFormPage> {
 
   @override
   void dispose() {
-    for (final c in [_name, _phone, _principal, _rate, _day, _notes]) {
+    for (final c in [_name, _phone, _principal, _rate, _notes]) {
       c.dispose();
     }
     super.dispose();
@@ -162,11 +162,11 @@ class _LoanFormPageState extends State<LoanFormPage> {
     if (!_form.currentState!.validate()) return;
     final principal = MoneyUtils.tryParse(_principal.text)!;
     final rate = MoneyUtils.tryParse(_rate.text)!;
-    final day = int.tryParse(_day.text);
+    final day = _expectedDay;
     bool ok;
     if (_edit != null) {
       final dc = Get.find<LoanDetailController>(tag: _edit!.id);
-      ok = await dc.editLoan(name: _name.text, phone: _phone.text, principal: principal, rate: rate, expectedDay: day, notes: _notes.text);
+      ok = await dc.editLoan(name: _name.text, phone: _phone.text, principal: principal, rate: rate, start: _start, expectedDay: day, notes: _notes.text);
     } else {
       ok = await Get.find<LendingController>().createLoan(name: _name.text, phone: _phone.text, principal: principal, rate: rate, start: _start, expectedDay: day, notes: _notes.text);
     }
@@ -189,8 +189,8 @@ class _LoanFormPageState extends State<LoanFormPage> {
           if (_monthly != null)
             AppCard(color: AppColors.interest.withOpacity(0.08), child: Text('Monthly interest: ${MoneyUtils.format(_monthly!, currency: cur)}', style: const TextStyle(fontWeight: FontWeight.w700))),
           DateField(label: 'Loan start date', value: _start, last: Fmt.today(), onChanged: (d) => setState(() => _start = d)),
-          if (_edit != null) const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('Start date cannot be changed. New rate or principal applies to future months only; past months keep their amounts.', style: TextStyle(fontSize: 12))),
-          AppTextField(controller: _day, label: 'Expected interest day of month (optional)', keyboard: TextInputType.number, validator: (v) => (v ?? '').isEmpty ? null : Validators.day(v)),
+          if (_edit != null) const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('Months that already have payments keep their amounts; other months follow the new rate, principal and due day. The start date can only change while no payments are recorded.', style: TextStyle(fontSize: 12))),
+          DayField(label: 'Interest due day (optional)', value: _expectedDay, optional: true, onChanged: (v) => setState(() => _expectedDay = v)),
           AppTextField(controller: _notes, label: 'Notes (optional)', maxLines: 2),
           Obx(() => PrimaryButton(label: 'Save loan', loading: saving.value, onPressed: _save)),
           const SizedBox(height: 24),
@@ -249,6 +249,26 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     if (ok == true) await c.closeLoan(MoneyUtils.tryParse(amount.text)!, date, notes.text);
   }
 
+  Future<void> _editPayment(InterestPayment p) async {
+    final r = await showEntryDialog(title: 'Edit payment', currency: cur, amount: p.amount, date: p.date, notes: p.notes, showNotes: true, last: Fmt.today());
+    if (r != null) await c.editPayment(p, r.amount, r.date, r.notes.isEmpty ? null : r.notes);
+  }
+
+  Future<void> _deletePayment(InterestPayment p) async {
+    if (await confirmDialog('Delete this payment?', '${m(p.amount)} is removed and that month goes back to pending.', confirm: 'Delete', danger: true)) c.deletePayment(p);
+  }
+
+  Future<void> _deleteLoan() async {
+    final l = c.loan.value;
+    if (l == null) return;
+    final ok = await confirmDialog('Delete loan to ${l.personName}?', 'The loan, all its interest months, payments and ledger entries are permanently removed.', confirm: 'Delete', danger: true);
+    if (ok && await c.deleteLoan()) Get.back();
+  }
+
+  Future<void> _reopenLoan() async {
+    if (await confirmDialog('Reopen this loan?', 'The returned-principal entry is removed and monthly interest continues.', confirm: 'Reopen')) c.reopenLoan();
+  }
+
   Future<void> _pay() async {
     await Get.toNamed(AppRoutes.paymentOf(id));
     c.load();
@@ -257,14 +277,25 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Obx(() => Text(c.loan.value?.personName ?? 'Loan')), actions: [
-          Obx(() => c.loan.value?.active == true
-              ? IconButton(
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: () async {
-                    await Get.toNamed(AppRoutes.lendingAdd, arguments: c.loan.value);
-                    c.load();
-                  })
-              : const SizedBox()),
+          Obx(() => c.loan.value == null
+              ? const SizedBox()
+              : PopupMenuButton<String>(
+                  onSelected: (v) async {
+                    if (v == 'edit') {
+                      await Get.toNamed(AppRoutes.lendingAdd, arguments: c.loan.value);
+                      c.load();
+                    } else if (v == 'reopen') {
+                      _reopenLoan();
+                    } else {
+                      _deleteLoan();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'edit', child: Text('Edit loan')),
+                    if (c.loan.value?.active == false) const PopupMenuItem(value: 'reopen', child: Text('Reopen loan')),
+                    const PopupMenuItem(value: 'delete', child: Text('Delete loan')),
+                  ],
+                )),
         ]),
         body: Obx(() => LoadState(
               loading: c.loading.value,
@@ -280,11 +311,14 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   Widget _content(Loan l) {
     final today = Fmt.today();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      AppCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      GradientCard(
+        gradient: AppGradients.ocean,
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text(m(l.principal), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800))),
-            l.active ? const StatusChip('Active', AppColors.income) : const StatusChip('Closed', AppColors.transfer),
+            Expanded(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(m(l.principal), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)))),
+            l.active ? const StatusChip('Active', Colors.white) : const StatusChip('Closed', Colors.white),
           ]),
           const SizedBox(height: 4),
           Text('${Fmt.rate(l.rate.toDouble())}% per month · ${m(InterestCalculator.monthly(l.principal, l.rate))} interest'),
@@ -292,7 +326,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           if (l.phone != null) Text('Phone: ${l.phone}'),
           if (!l.active) Text('Principal returned: ${m(l.principalReturned)}'),
           if (l.notes != null && l.notes!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(l.notes!)),
-        ]),
+        ])),
       ),
       StatGrid(minTile: 150, children: [
         StatTile(label: 'Interest received', value: m(c.received), color: AppColors.income),
@@ -305,6 +339,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         const SizedBox(height: 8),
         OutlinedButton(onPressed: _closeLoan, child: const Text('Close loan')),
       ],
+      if (!l.active) ...[const SizedBox(height: 8), OutlinedButton.icon(onPressed: _reopenLoan, icon: const Icon(Icons.lock_open_rounded), label: const Text('Reopen loan'))],
       const SectionHeader('Interest history'),
       for (final p in c.periods)
         AppCard(
@@ -328,6 +363,8 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
             const SizedBox(width: 10),
             Expanded(child: Text('${Fmt.date(p.date)}${p.notes != null && p.notes!.isNotEmpty ? ' · ${p.notes}' : ''}')),
             Text('+${m(p.amount)}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.income)),
+            IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editPayment(p)),
+            IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.expense), onPressed: () => _deletePayment(p)),
           ]),
         ),
     ]);

@@ -40,6 +40,12 @@ abstract class BudgetRepository {
   Future<void> updateSalary(String budgetId, Decimal salary);
   Future<void> addIncome({required String budgetId, required Decimal amount, required DateTime date, required String description});
   Future<void> closeBudget(String budgetId);
+  Future<void> reopenBudget(String budgetId);
+  Future<void> deleteBudget(String budgetId);
+  Future<List<MoneyTxn>> incomes(String budgetId);
+  Future<void> updateIncome(String id, {required Decimal amount, required DateTime date, required String description});
+  Future<void> deleteIncome(String id);
+  Future<BudgetItem?> itemById(String id);
 }
 
 abstract class SavingsRepository {
@@ -53,6 +59,9 @@ abstract class SavingsRepository {
     String? notes,
     required String key,
   });
+  Future<SavingsTxn?> transactionById(String id);
+  Future<void> updateTransaction({required String id, required Decimal amount, required DateTime date, required String description, String? notes});
+  Future<void> deleteTransaction(String id);
 }
 
 abstract class LendingRepository {
@@ -71,6 +80,10 @@ abstract class LendingRepository {
     required String key,
   });
   Future<void> closeLoan({required String loanId, required Decimal amount, required DateTime date, String? notes});
+  Future<void> deleteLoan(String id);
+  Future<void> reopenLoan(String id);
+  Future<void> updatePayment({required String id, required Decimal amount, required DateTime date, String? notes});
+  Future<void> deletePayment(String id);
 }
 
 abstract class TransactionRepository {

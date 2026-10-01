@@ -32,14 +32,22 @@ FlTitlesData _titles(List<String> labels) => FlTitlesData(
 
 class CategoryPie extends StatelessWidget {
   final Map<String, double> data;
-  const CategoryPie({super.key, required this.data});
+  final String? centerTop;
+  final String? centerBottom;
+  const CategoryPie({super.key, required this.data, this.centerTop, this.centerBottom});
   @override
   Widget build(BuildContext context) {
     final total = data.values.fold<double>(0, (a, b) => a + b);
     var i = 0;
     return SizedBox(
       height: 220,
-      child: PieChart(PieChartData(
+      child: Stack(alignment: Alignment.center, children: [
+        if (centerTop != null)
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(centerBottom ?? '', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text(centerTop!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          ]),
+        PieChart(PieChartData(
         sectionsSpace: 2,
         centerSpaceRadius: 46,
         sections: [
@@ -53,8 +61,23 @@ class CategoryPie extends StatelessWidget {
             ),
         ],
       )),
+      ]),
     );
   }
+}
+
+class ChartLegend extends StatelessWidget {
+  final List<(String, Color)> items;
+  const ChartLegend({super.key, required this.items});
+  @override
+  Widget build(BuildContext context) => Wrap(spacing: 14, runSpacing: 6, children: [
+        for (final e in items)
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 10, height: 10, decoration: BoxDecoration(color: e.$2, borderRadius: BorderRadius.circular(3))),
+            const SizedBox(width: 6),
+            Text(e.$1, style: const TextStyle(fontSize: 12)),
+          ]),
+      ]);
 }
 
 class GroupedBars extends StatelessWidget {

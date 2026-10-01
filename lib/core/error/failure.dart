@@ -35,7 +35,7 @@ Failure mapError(Object e) {
     if (m.contains('jwt') || m.contains('expired') || m.contains('session')) {
       return const Failure('Your session has expired. Please log in again.', FailureType.auth);
     }
-    return const Failure('Authentication failed. Please try again.', FailureType.auth);
+    return Failure(e.message.isEmpty ? 'Authentication failed. Please try again.' : e.message, FailureType.auth);
   }
 
   if (e is PostgrestException) {
@@ -47,6 +47,10 @@ Failure mapError(Object e) {
       'NOT_FOUND': 'That record no longer exists.',
       'COMPLETED_LOCKED': 'Undo the completion before changing the amount.',
       'DEMO_EXISTS': 'Demo data already exists.',
+      'NOT_EDITABLE': 'Monthly savings come from closing a cycle. Reopen that cycle to change them.',
+      'HAS_PAYMENTS': 'This loan has interest payments. Delete them first to change the start date.',
+      'NOT_CLOSED': 'That is not closed.',
+      'INVALID_DATE': 'That date is not allowed.',
       'NOT_AUTHENTICATED': 'Your session has expired. Please log in again.',
     };
     for (final entry in known.entries) {
@@ -68,7 +72,8 @@ Failure mapError(Object e) {
     if (e.code == 'PGRST301' || e.message.toLowerCase().contains('jwt')) {
       return const Failure('Your session has expired. Please log in again.', FailureType.auth);
     }
-    return const Failure('Something went wrong on our side. Please try again.', FailureType.server);
+    // The code helps diagnose set-up problems, e.g. 42P01 = table missing (schema.sql not run).
+    return Failure('Server error (${e.code ?? 'unknown'}): ${e.message}', FailureType.server);
   }
 
   final text = e.toString();

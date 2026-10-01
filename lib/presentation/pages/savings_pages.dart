@@ -6,6 +6,7 @@ import '../../core/routes/app_routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/money.dart';
+import '../../core/widgets/snack.dart';
 import '../../domain/entities/entities.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/savings_controller.dart';
@@ -75,12 +76,13 @@ class _SavingsPageState extends State<SavingsPage> {
                   PageBody(
                     maxWidth: 800,
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      AppCard(
-                        color: AppColors.savings,
-                        padding: const EdgeInsets.all(22),
+                      GradientCard(
+                        gradient: AppGradients.teal,
+                        padding: const EdgeInsets.all(24),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Total savings', style: TextStyle(color: Colors.white70)),
-                          FittedBox(fit: BoxFit.scaleDown, child: Text(m(c.balance), style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w800))),
+                          Row(children: const [Icon(Icons.savings_rounded, color: Colors.white70, size: 18), SizedBox(width: 6), Text('Total savings', style: TextStyle(color: Colors.white70))]),
+                          const SizedBox(height: 6),
+                          FittedBox(fit: BoxFit.scaleDown, child: AnimatedAmount(value: c.balance, currency: c.currency, style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w800))),
                         ]),
                       ),
                       if (c.goalProgress != null)
@@ -88,7 +90,7 @@ class _SavingsPageState extends State<SavingsPage> {
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text('Goal: ${m(auth.profile.value!.savingsGoal!)}${auth.profile.value!.savingsGoalDate != null ? ' by ${Fmt.date(auth.profile.value!.savingsGoalDate!)}' : ''}', style: const TextStyle(fontWeight: FontWeight.w700)),
                             const SizedBox(height: 8),
-                            LinearProgressIndicator(value: c.goalProgress, minHeight: 8, borderRadius: BorderRadius.circular(8)),
+                            GradientProgress(value: c.goalProgress ?? 0, gradient: AppGradients.teal),
                             const SizedBox(height: 6),
                             Text('${((c.goalProgress ?? 0) * 100).round()}% · ${m(c.goalRemaining ?? Decimal.zero)} to go'),
                           ]),
@@ -108,6 +110,23 @@ class _SavingsPageState extends State<SavingsPage> {
         ),
       );
 
+  Future<void> _edit(SavingsTxn t) async {
+    final r = await showEntryDialog(title: 'Edit entry', currency: c.currency, amount: t.amount, date: t.date, description: t.description, notes: t.notes, showDescription: true, showNotes: true, last: Fmt.today());
+    if (r != null) await c.updateTx(t, r.amount, r.date, r.description, r.notes.isEmpty ? null : r.notes);
+  }
+
+  Future<void> _delete(SavingsTxn t) async {
+    if (await confirmDialog('Delete this entry?', 'Your savings balance is adjusted back by ${m(t.amount)}.', confirm: 'Delete', danger: true)) c.deleteTx(t);
+  }
+
+  void _actions(SavingsTxn t) {
+    if (t.type == SavingsTxnType.monthlySavings) {
+      Snack.info('This came from closing a cycle. Reopen it from Budget → History to change it.');
+      return;
+    }
+    showActionSheet(title: t.description.isEmpty ? 'Savings entry' : t.description, subtitle: '${Fmt.date(t.date)} · ${m(t.amount)}', onEdit: () => _edit(t), onDelete: () => _delete(t));
+  }
+
   Widget _tile(SavingsTxn t) {
     final out = t.signed < Decimal.zero;
     final label = switch (t.type) {
@@ -117,6 +136,7 @@ class _SavingsPageState extends State<SavingsPage> {
       SavingsTxnType.adjustment => 'Adjustment',
     };
     return AppCard(
+      onTap: () => _actions(t),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(children: [
         CircleAvatar(backgroundColor: (out ? AppColors.expense : AppColors.savings).withOpacity(0.14), child: Icon(out ? Icons.north_east : Icons.south_west, color: out ? AppColors.expense : AppColors.savings, size: 20)),

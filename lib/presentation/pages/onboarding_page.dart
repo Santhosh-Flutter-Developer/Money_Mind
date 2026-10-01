@@ -18,13 +18,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final c = Get.find<OnboardingController>();
   final _salary = TextEditingController();
   final _goal = TextEditingController();
-  final _day = TextEditingController(text: '1');
+  int _dayVal = 1;
 
   @override
   void dispose() {
     _salary.dispose();
     _goal.dispose();
-    _day.dispose();
     super.dispose();
   }
 
@@ -33,25 +32,25 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Future<void> _addExpense() async {
     final name = TextEditingController();
     final amount = TextEditingController();
-    final day = TextEditingController();
+    int? day;
     final key = GlobalKey<FormState>();
-    final ok = await Get.dialog<bool>(AlertDialog(
+    final ok = await Get.dialog<bool>(StatefulBuilder(builder: (ctx, set) => AlertDialog(
       title: const Text('Regular expense'),
       content: Form(
         key: key,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           AppTextField(controller: name, label: 'Name (e.g. Rent)', validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
           AmountField(controller: amount, currency: cur),
-          AppTextField(controller: day, label: 'Due day of month (optional)', keyboard: TextInputType.number, validator: (v) => (v ?? '').isEmpty ? null : (int.tryParse(v!) == null || int.parse(v) < 1 || int.parse(v) > 31 ? '1-31' : null)),
+          DayField(label: 'Due day (optional)', value: day, optional: true, onChanged: (v) => set(() => day = v)),
         ]),
       ),
       actions: [
         TextButton(onPressed: () => Get.back(result: false), child: const Text('Cancel')),
         TextButton(onPressed: () { if (key.currentState!.validate()) Get.back(result: true); }, child: const Text('Add')),
       ],
-    ));
+    )));
     if (ok == true) {
-      c.expenses.add(DraftExpense(name.text.trim(), MoneyUtils.tryParse(amount.text)!, int.tryParse(day.text)));
+      c.expenses.add(DraftExpense(name.text.trim(), MoneyUtils.tryParse(amount.text)!, day));
     }
   }
 
@@ -62,10 +61,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       case 1:
         return _panel(Icons.payments_outlined, 'Your salary', 'We use this to plan each cycle. You can change it any month.', [
           AmountField(controller: _salary, label: 'Monthly salary', currency: cur, allowZero: true),
-          AppTextField(controller: _day, label: 'Salary day (1-28)', keyboard: TextInputType.number, validator: (v) {
-            final n = int.tryParse(v ?? '');
-            return n == null || n < 1 || n > 28 ? 'Enter 1-28' : null;
-          }),
+          StatefulBuilder(builder: (ctx, set) => DayField(label: 'Salary day', value: _dayVal, max: 28, onChanged: (v) => set(() => _dayVal = v ?? _dayVal))),
           const Text('Salary day 5 means your cycle runs 5th → 4th of the next month.', style: TextStyle(fontSize: 12)),
         ]);
       case 2:
@@ -101,8 +97,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Widget _panel(IconData icon, String title, String text, List<Widget> children) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Icon(icon, size: 56, color: AppColors.primary),
-        const SizedBox(height: 16),
+        Center(child: Container(width: 96, height: 96, decoration: BoxDecoration(gradient: AppGradients.brand, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.35), blurRadius: 20, offset: const Offset(0, 10))]), child: Icon(icon, size: 48, color: Colors.white))),
+        const SizedBox(height: 22),
         Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
         Text(text, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
@@ -113,7 +109,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   bool _validateStep() {
     if (c.step.value == 1) {
       final s = MoneyUtils.tryParse(_salary.text);
-      final d = int.tryParse(_day.text);
+      final d = _dayVal;
       if (s == null || s < Decimal.zero) return false;
       if (d == null || d < 1 || d > 28) return false;
       c.salary.value = s;
@@ -135,7 +131,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(children: [
-                  Obx(() => LinearProgressIndicator(value: (c.step.value + 1) / OnboardingController.steps, borderRadius: BorderRadius.circular(8))),
+                  Obx(() => GradientProgress(value: (c.step.value + 1) / OnboardingController.steps)),
                   const SizedBox(height: 24),
                   Expanded(child: SingleChildScrollView(child: Obx(_stepBody))),
                   Obx(() => Row(children: [

@@ -105,6 +105,22 @@ class BudgetRepositoryImpl implements BudgetRepository {
       guard(() => _ds.addIncome(budgetId, MoneyUtils.toDb(amount), Fmt.db(date), description));
   @override
   Future<void> closeBudget(String budgetId) => guard(() => _ds.closeBudget(budgetId));
+  @override
+  Future<void> reopenBudget(String budgetId) => guard(() => _ds.reopenBudget(budgetId));
+  @override
+  Future<void> deleteBudget(String budgetId) => guard(() => _ds.deleteBudget(budgetId));
+  @override
+  Future<List<MoneyTxn>> incomes(String budgetId) => guard(() async => (await _ds.incomes(budgetId)).map(Mappers.txn).toList());
+  @override
+  Future<void> updateIncome(String id, {required Decimal amount, required DateTime date, required String description}) =>
+      guard(() => _ds.updateIncome(id, {'amount': MoneyUtils.toDb(amount), 'txn_date': Fmt.db(date), 'description': description}));
+  @override
+  Future<void> deleteIncome(String id) => guard(() => _ds.deleteIncome(id));
+  @override
+  Future<BudgetItem?> itemById(String id) => guard(() async {
+        final j = await _ds.itemById(id);
+        return j == null ? null : Mappers.item(j);
+      });
 }
 
 class SavingsRepositoryImpl implements SavingsRepository {
@@ -133,6 +149,22 @@ class SavingsRepositoryImpl implements SavingsRepository {
             'p_notes': notes,
             'p_key': key,
           }));
+  @override
+  Future<SavingsTxn?> transactionById(String id) => guard(() async {
+        final j = await _ds.savingsTxnById(id);
+        return j == null ? null : Mappers.savingsTxn(j);
+      });
+  @override
+  Future<void> updateTransaction({required String id, required Decimal amount, required DateTime date, required String description, String? notes}) =>
+      guard(() => _ds.updateSavingsTxn({
+            'p_id': id,
+            'p_amount': MoneyUtils.toDb(amount),
+            'p_date': Fmt.db(date),
+            'p_description': description,
+            'p_notes': notes,
+          }));
+  @override
+  Future<void> deleteTransaction(String id) => guard(() => _ds.deleteSavingsTxn(id));
 }
 
 class LendingRepositoryImpl implements LendingRepository {
@@ -148,7 +180,16 @@ class LendingRepositoryImpl implements LendingRepository {
   @override
   Future<void> createLoan(Map<String, dynamic> values) => guard(() => _ds.createLoan(values));
   @override
-  Future<void> updateLoan(String id, Map<String, dynamic> values) => guard(() => _ds.updateLoan(id, values));
+  Future<void> updateLoan(String id, Map<String, dynamic> values) => guard(() => _ds.updateLoan({...values, 'p_loan_id': id}));
+  @override
+  Future<void> deleteLoan(String id) => guard(() => _ds.deleteLoan(id));
+  @override
+  Future<void> reopenLoan(String id) => guard(() => _ds.reopenLoan(id));
+  @override
+  Future<void> updatePayment({required String id, required Decimal amount, required DateTime date, String? notes}) =>
+      guard(() => _ds.updatePayment({'p_payment_id': id, 'p_amount': MoneyUtils.toDb(amount), 'p_date': Fmt.db(date), 'p_notes': notes}));
+  @override
+  Future<void> deletePayment(String id) => guard(() => _ds.deletePayment(id));
   @override
   Future<List<InterestPeriod>> periods({String? loanId}) =>
       guard(() async => (await _ds.periods(loanId)).map(Mappers.period).toList());

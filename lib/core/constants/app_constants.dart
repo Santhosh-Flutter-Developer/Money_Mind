@@ -4,10 +4,16 @@ class AppConstants {
 
   /// Supplied at build/run time, never hardcoded:
   /// flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
-  // static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  // static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-  static const supabaseUrl = "https://llqtmawuxxkeutaogxuk.supabase.co";
-  static const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxscXRtYXd1eHhrZXV0YW9neHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NzM3NDIsImV4cCI6MjEwNjM0OTc0Mn0.EyVMVHN8JdkJ94nqIBUSbFLEhKA8KsUecf_h6lGl7j0";
+  static const supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://llqtmawuxxkeutaogxuk.supabase.co',
+  );
+  // Public "anon" key (safe to ship; data is protected by Row Level Security).
+  static const supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxscXRtYXd1eHhrZXV0YW9neHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NzM3NDIsImV4cCI6MjEwNjM0OTc0Mn0.EyVMVHN8JdkJ94nqIBUSbFLEhKA8KsUecf_h6lGl7j0',
+  );
   static bool get isConfigured => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   /// Enables the "Load demo data" tile in More. Use --dart-define=DEMO_MODE=true

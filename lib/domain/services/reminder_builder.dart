@@ -15,16 +15,19 @@ class ReminderBuilder {
     required DateTime today,
   }) {
     final out = <Reminder>[];
-    DateTime at(DateTime d) => DateTime(d.year, d.month, d.day, 9);
+    DateTime at(DateTime d, [int? minutes]) => DateTime(d.year, d.month, d.day,
+        minutes != null ? minutes ~/ 60 : settings.reminderHour, minutes != null ? minutes % 60 : settings.reminderMinute);
     final cur = profile.currency;
 
     if (settings.expenseReminders) {
       for (final i in items.where((i) => i.isPending && i.dueDate != null)) {
         final due = i.dueDate!;
         out.add(Reminder(
-          title: '${i.name} is due ${due == today ? 'today' : 'tomorrow'}',
+          title: i.dueTimeMinutes != null ? '${i.name} is due now' : '${i.name} is due ${due == today ? 'today' : 'tomorrow'}',
           body: '${MoneyUtils.format(i.amount, currency: cur)} pending',
-          when: at(due.subtract(const Duration(days: 1)).isBefore(today) ? due : due.subtract(const Duration(days: 1))),
+          when: i.dueTimeMinutes != null
+              ? at(due, i.dueTimeMinutes) // exact time chosen for this expense
+              : at(due.subtract(const Duration(days: 1)).isBefore(today) ? due : due.subtract(const Duration(days: 1))),
           kind: 'expense',
         ));
       }

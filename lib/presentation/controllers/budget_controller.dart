@@ -18,6 +18,7 @@ class BudgetController extends GetxController {
   final period = Rxn<BudgetPeriod>();
   final budget = Rxn<MonthlyBudget>();
   final items = <BudgetItem>[].obs;
+  final incomes = <MoneyTxn>[].obs;
   final categories = <ExpenseCategory>[].obs;
   final filter = 'all'.obs; // all | pending | completed
   final search = ''.obs;
@@ -37,6 +38,7 @@ class BudgetController extends GetxController {
     period.value = null;
     budget.value = null;
     items.clear();
+    incomes.clear();
     categories.clear();
   }
 
@@ -77,6 +79,7 @@ class BudgetController extends GetxController {
       budget.value = b;
       canCreate.value = b == null && !p.start.isAfter(Fmt.today());
       items.assignAll(b == null ? <BudgetItem>[] : await _uc.items(b.id));
+      incomes.assignAll(b == null ? <MoneyTxn>[] : await _uc.incomes(b.id));
     } catch (e) {
       error.value = mapError(e).message;
     } finally {
@@ -144,6 +147,7 @@ class BudgetController extends GetxController {
     required Decimal amount,
     required String? categoryId,
     required DateTime date,
+    int? dueTimeMinutes,
     String? notes,
   }) async {
     final b = budget.value;
@@ -151,9 +155,9 @@ class BudgetController extends GetxController {
     saving.value = true;
     try {
       if (existing == null) {
-        await _uc.addItem(budget: b, name: name, amount: amount, categoryId: categoryId, date: date, notes: notes);
+        await _uc.addItem(budget: b, name: name, amount: amount, categoryId: categoryId, date: date, dueTimeMinutes: dueTimeMinutes, notes: notes);
       } else {
-        await _uc.updateItem(existing, name: name, amount: amount, categoryId: categoryId, date: date, notes: notes);
+        await _uc.updateItem(existing, name: name, amount: amount, categoryId: categoryId, date: date, dueTimeMinutes: dueTimeMinutes, notes: notes);
       }
       await load(target: period.value);
       return true;
@@ -229,6 +233,58 @@ class BudgetController extends GetxController {
     } finally {
       saving.value = false;
     }
+  }
+
+  /// Loads the cycle an expense belongs to, so it can be edited from anywhere (e.g. Transactions).
+  Future<BudgetItem?> prepareItemEdit(String itemId) async {
+    try {
+      final item = await _uc.itemById(itemId);
+      if (item == null) {
+        Snack.error('That expense no longer exists.');
+        return null;
+      }
+      final b = await _uc.budgetById(item.budgetId);
+      if (b != null) await load(target: b.period);
+      return item;
+    } catch (e) {
+      Snack.error(mapError(e).message);
+      return null;
+    }
+  }
+
+  Future<bool> _run(Future<void> Function() action, String ok) async {
+    if (saving.value) return false;
+    saving.value = true;
+    try {
+      await action();
+      await load(target: period.value);
+      Snack.success(ok);
+      return true;
+    } catch (e) {
+      Snack.error(mapError(e).message);
+      await load(target: period.value);
+      return false;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  Future<bool> editIncome(MoneyTxn t, Decimal amount, DateTime date, String description) =>
+      _run(() => _uc.updateIncome(t, amount, date, description), 'Income updated');
+  Future<bool> deleteIncome(MoneyTxn t) => _run(() => _uc.deleteIncome(t), 'Income deleted');
+
+  /// Undoes "Close cycle": takes the money back out of savings and unlocks editing.
+  Future<bool> reopen() {
+    final b = budget.value;
+    if (b == null) return Future.value(false);
+    return _run(() => _uc.reopenBudget(b), '${b.period.label} reopened');
+  }
+
+  /// Deletes a past cycle. For the current cycle this acts as a reset: it is rebuilt from your recurring expenses.
+  Future<bool> deleteCycle() {
+    final b = budget.value;
+    if (b == null) return Future.value(false);
+    return _run(() => _uc.deleteBudget(b), isCurrent ? 'Cycle reset' : 'Cycle deleted');
   }
 
   Future<List<MonthlyBudget>> history() => _uc.budgets();

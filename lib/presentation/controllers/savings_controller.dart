@@ -67,6 +67,11 @@ class SavingsController extends GetxController {
     return _run(() => _uc.withdraw(w, amount, date, description, notes, key), 'Withdrawal recorded');
   }
 
+  Future<bool> updateTx(SavingsTxn t, Decimal amount, DateTime date, String description, String? notes) =>
+      _run(() => _uc.updateTx(t, amount, date, description, notes), 'Entry updated');
+
+  Future<bool> deleteTx(SavingsTxn t) => _run(() => _uc.deleteTx(t), 'Entry deleted');
+
   Future<bool> _run(Future<void> Function() action, String okMessage) async {
     if (saving.value) return false;
     saving.value = true;

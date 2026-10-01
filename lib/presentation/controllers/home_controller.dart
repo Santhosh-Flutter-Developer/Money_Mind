@@ -26,6 +26,7 @@ class HomeController extends GetxController {
   final periods = <InterestPeriod>[].obs;
   final interestThisCycle = Decimal.zero.obs;
   final reminders = <Reminder>[].obs;
+  final trend = <MonthlyBudget>[].obs; // last 6 cycles, oldest first
   final loading = false.obs;
   final error = RxnString();
 
@@ -39,6 +40,7 @@ class HomeController extends GetxController {
       loans.clear();
       periods.clear();
       reminders.clear();
+      trend.clear();
     });
   }
 
@@ -57,6 +59,20 @@ class HomeController extends GetxController {
 
   /// Cash/available + savings + outstanding principal. Lending and savings transfers are not expenses.
   Decimal get netWorth => available + savings + moneyLent;
+
+  /// Completed spending per category this cycle; falls back to the plan when nothing is paid yet.
+  bool get categoryIsPlanned => !items.any((i) => i.isCompleted);
+
+  Map<String, Decimal> get categorySpend {
+    final map = <String, Decimal>{};
+    final source = categoryIsPlanned ? items.where((i) => i.status != ItemStatus.skipped) : items.where((i) => i.isCompleted);
+    for (final i in source) {
+      final k = i.categoryName ?? 'Other';
+      map[k] = (map[k] ?? Decimal.zero) + i.amount;
+    }
+    final sorted = map.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return {for (final e in sorted) e.key: e.value};
+  }
 
   List<BudgetItem> get upcoming {
     final list = items.where((i) => i.status != ItemStatus.skipped).toList()
@@ -80,6 +96,7 @@ class HomeController extends GetxController {
         _lending.loans(),
         _lending.periods(),
         _lending.payments(from: p.start, to: p.end),
+        _budget.budgets(from: DateTime(p.start.year, p.start.month - 7, 1)),
       ]);
       budget.value = b;
       items.assignAll(r[0] as List<BudgetItem>);
@@ -87,6 +104,8 @@ class HomeController extends GetxController {
       loans.assignAll(r[2] as List<Loan>);
       periods.assignAll(r[3] as List<InterestPeriod>);
       interestThisCycle.value = MoneyUtils.sum((r[4] as List<InterestPayment>).map((e) => e.amount));
+      final all = r[5] as List<MonthlyBudget>;
+      trend.assignAll(all.length > 6 ? all.sublist(all.length - 6) : all);
       _buildReminders();
     } catch (e) {
       error.value = mapError(e).message;
