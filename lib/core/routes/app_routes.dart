@@ -1,0 +1,39 @@
+class AppRoutes {
+  static const splash = '/';
+  static const login = '/login';
+  static const register = '/register';
+  static const forgotPassword = '/forgot-password';
+  static const resetPassword = '/reset-password';
+  static const onboarding = '/onboarding';
+  static const home = '/home';
+  static const budget = '/budget';
+  static const budgetDetail = '/budget/:id';
+  static const expenses = '/expenses';
+  static const expenseAdd = '/expense/add';
+  static const expenseEdit = '/expense/edit';
+  static const lending = '/lending';
+  static const lendingAdd = '/lending/add';
+  static const lendingDetail = '/lending/:id';
+  static const lendingPayment = '/lending/:id/payment';
+  static const savings = '/savings';
+  static const savingsAdd = '/savings/add';
+  static const savingsWithdraw = '/savings/withdraw';
+  static const reports = '/reports';
+  static const reportExpenses = '/reports/expenses';
+  static const reportSavings = '/reports/savings';
+  static const reportLending = '/reports/lending';
+  static const reportGeneric = '/reports/detail';
+  static const reportExport = '/reports/export';
+  static const transactions = '/transactions';
+  static const calendar = '/calendar';
+  static const notifications = '/notifications';
+  static const settings = '/settings';
+  static const profile = '/profile';
+  static const categories = '/categories';
+  static const recurring = '/recurring-expenses';
+  static const salarySettings = '/salary-settings';
+
+  static String budgetOf(String id) => '/budget/$id';
+  static String loanOf(String id) => '/lending/$id';
+  static String paymentOf(String id) => '/lending/$id/payment';
+}
